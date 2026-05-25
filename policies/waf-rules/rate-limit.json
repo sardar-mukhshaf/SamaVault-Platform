@@ -1,0 +1,18 @@
+{
+  "Name": "RateLimitRule",
+  "Priority": 5,
+  "Statement": {
+    "RateBasedStatement": {
+      "Limit": 3000,
+      "AggregateKeyType": "IP"
+    }
+  },
+  "Action": {
+    "Block": {}
+  },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "RateLimitRule"
+  }
+}

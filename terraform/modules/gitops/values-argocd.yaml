@@ -1,0 +1,26 @@
+redis-ha:
+  enabled: true
+
+controller:
+  replicas: 2
+
+server:
+  replicas: 2
+  extraArgs:
+    - --insecure
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: true
+
+configs:
+  cm:
+    statusbadge.enabled: "true"
+    resource.customizations: |
+      extensions/Ingress:
+        health.lua: |
+          hs = {}
+          hs.status = "Healthy"
+          return hs

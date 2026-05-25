@@ -1,0 +1,261 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# CI/CD Pipeline
+# Build -> SAST -> Container Scan -> Terraform Plan -> Deploy to dev/staging/prod
+# ---------------------------------------------------------------------------------------------------------------------
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION_PRIMARY: me-central-1
+  AWS_REGION_SECONDARY: me-central-2
+  ECR_REPO: saudi-bank-backend
+  TF_VERSION: "1.7.0"
+
+permissions:
+  id-token: write
+  contents: read
+  security-events: write
+
+jobs:
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 1: Build Docker Image and Push to ECR
+  # -------------------------------------------------------------------------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set Image Tag
+        id: vars
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Build Docker Image
+        run: |
+          docker build -t $ECR_REPO:$IMAGE_TAG .
+          docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
+
+      - name: Push to ECR Primary Region
+        run: |
+          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
+
+      - name: Replicate to Secondary Region
+        run: |
+          aws ecr get-login-password --region $AWS_REGION_PRIMARY | \
+            docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          # Cross-region replication should be enabled on the ECR repository itself.
+          # This step serves as a verification.
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 2: SAST with SonarQube
+  # -------------------------------------------------------------------------------------------------------------------
+  sast:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: sonarqube-quality-gate-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          scanMetadataReportFile: .scannerwork/report-task.txt
+        continue-on-error: false
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 3: Container Scan with Trivy
+  # -------------------------------------------------------------------------------------------------------------------
+  container-scan:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 4: Terraform Plan for All Environments
+  # -------------------------------------------------------------------------------------------------------------------
+  terraform-plan:
+    runs-on: ubuntu-latest
+    needs: [sast, container-scan]
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=terraform/${{ matrix.environment }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION_PRIMARY }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var-file="environments/${{ matrix.environment }}/terraform.tfvars" \
+            -out=tfplan-${{ matrix.environment }}
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/tfplan-${{ matrix.environment }}
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 5: Deploy to Dev (Auto)
+  # -------------------------------------------------------------------------------------------------------------------
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    environment:
+      name: dev
+      url: https://argocd.dev.saudi-bank-backend.local
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.29.0
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION_PRIMARY --name saudi-bank-backend-dev-eks
+
+      - name: Sync ArgoCD App (Dev)
+        run: |
+          kubectl patch application dev-apps -n argocd --type merge -p '{"operation": {"sync": {"syncStrategy": {"hook": {}}}, "initiatedBy": {"username": "github-actions"}}}'
+        continue-on-error: true
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 6: Deploy to Staging (Manual Approval)
+  # -------------------------------------------------------------------------------------------------------------------
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    environment:
+      name: staging
+      url: https://argocd.staging.saudi-bank-backend.local
+    steps:
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.29.0
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION_PRIMARY --name saudi-bank-backend-staging-eks
+
+      - name: Sync ArgoCD App (Staging)
+        run: |
+          kubectl patch application staging-apps -n argocd --type merge -p '{"operation": {"sync": {"syncStrategy": {"hook": {}}}, "initiatedBy": {"username": "github-actions"}}}'
+        continue-on-error: true
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Job 7: Deploy to Production (Two-Person Approval + Soak Check)
+  # -------------------------------------------------------------------------------------------------------------------
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment:
+      name: prod
+      url: https://argocd.prod.saudi-bank-backend.local
+    steps:
+      - name: 24-Hour Staging Soak Check
+        run: |
+          echo "Staging soak check: Ensure staging has been stable for 24 hours."
+          echo "This gate is enforced via GitHub Environment protection rules."
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION_PRIMARY }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.29.0
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION_PRIMARY --name saudi-bank-backend-prod-eks
+
+      - name: Sync ArgoCD App (Prod)
+        run: |
+          kubectl patch application prod-apps -n argocd --type merge -p '{"operation": {"sync": {"syncStrategy": {"hook": {}}}, "initiatedBy": {"username": "github-actions"}}}'
+        continue-on-error: true

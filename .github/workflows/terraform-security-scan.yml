@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Terraform Security Scan
+# Runs Checkov and tfsec on every PR and push to main.
+# ---------------------------------------------------------------------------------------------------------------------
+name: Terraform Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-security-scan.yml'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: sarif
+          output_file_path: reports/checkov.sarif
+          soft_fail: true
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: reports/checkov.sarif
+
+  tfsec:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/
+          format: sarif
+          out: reports/tfsec.sarif
+          soft_fail: true
+
+      - name: Upload tfsec SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: reports/tfsec.sarif
