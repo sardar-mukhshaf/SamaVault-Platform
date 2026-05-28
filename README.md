@@ -1,4 +1,4 @@
-# Saudi Digital Banking Backend Infrastructure
+# SAMA VAULT PLATFORM
 
 > **Production-Grade, Multi-Region AWS Infrastructure for Simulated Digital Banking**
 > **SAMA Compliance-Ready | GitOps-Driven | Zero Hardcoded Values**
