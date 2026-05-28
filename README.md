@@ -6,9 +6,8 @@
 ---
 
 ## Table of Contents
-
-1. [How This Works — Step by Step](#how-this-works--step-by-step)
-2. [What Is This Project?](#what-is-this-project)
+1, [What Is This Project?](#what-is-this-project)
+2. [How This Works — Step by Step](#how-this-works--step-by-step)
 3. [Behind the Scenes — What Actually Happens](#behind-the-scenes--what-actually-happens)
 4. [The ONE File You Need to Edit](#the-one-file-you-need-to-edit)
 5. [Project Overview](#project-overview)
@@ -26,6 +25,52 @@
 17. [Roadmap](#roadmap)
 
 ---
+
+---
+
+## What Is This Project?
+
+### The Short Answer
+
+This is a **ready-to-deploy cloud infrastructure** for a Saudi digital bank — built entirely with code, with zero clicking in the AWS console, and full compliance with Saudi Arabia's banking security rules (SAMA regulations).
+
+### The Honest Explanation (No Jargon)
+
+Imagine you want to build the tech behind an app like STC Pay or Urway. Before you can write a single line of banking app code, you need:
+
+| What you need                    | What this project does                                       |
+| -------------------------------- | ------------------------------------------------------------ |
+| Servers to run your app          | Creates Kubernetes clusters on AWS (EKS) in Riyadh & Dubai   |
+| A database to store transactions | Creates encrypted PostgreSQL (RDS) with automatic backups    |
+| A firewall to block hackers      | Creates WAF — blocks all countries except Saudi Arabia & UAE |
+| Security cameras (audit logs)    | Creates CloudTrail — records every single action forever     |
+| A vault for encryption keys      | Creates KMS — every byte of data is encrypted                |
+| Monitoring dashboards            | Creates Prometheus + Grafana — see everything in real-time   |
+| Automatic deployments            | Creates ArgoCD — push to Git, cluster updates itself         |
+| Disaster recovery                | Spins up everything in Dubai too, as a warm backup           |
+| SAMA compliance proof            | Every control maps to a specific SAMA regulation number      |
+
+### Why Code Instead of Clicking?
+
+When you click through the AWS console to set things up, three bad things happen:
+
+1. **You can't repeat it** — if you need a second environment (staging, prod), you click again, and probably forget something
+2. **You can't prove it** — an auditor asks "is your audit log retention set to 7 years?" — you can't prove it without code
+3. **You can't review it** — no one can check your work, no pull requests, no history
+
+With this project, every setting is in a `.tfvars` file. You open a PR, someone reviews it, it gets applied automatically. Full history. Full audit trail. Full reproducibility.
+
+### Who Built This For?
+
+This is a **portfolio/reference implementation** for:
+
+- Cloud Architects who want to show they can design fintech infrastructure
+- DevOps/Platform Engineers targeting roles at STC Pay, Urway, Tamara, or traditional banks in KSA
+- Compliance teams who want working code, not just policy documents
+- Anyone studying how production banking infrastructure actually works
+
+---
+
 
 ## How This Works — Step by Step
 
@@ -174,50 +219,6 @@ You filled in one config file. You ran 4 commands. You now have:
 - GitOps deployment pipeline
 - Automatic failover to Dubai if Riyadh goes down
 
----
-
-## What Is This Project?
-
-### The Short Answer
-
-This is a **ready-to-deploy cloud infrastructure** for a Saudi digital bank — built entirely with code, with zero clicking in the AWS console, and full compliance with Saudi Arabia's banking security rules (SAMA regulations).
-
-### The Honest Explanation (No Jargon)
-
-Imagine you want to build the tech behind an app like STC Pay or Urway. Before you can write a single line of banking app code, you need:
-
-| What you need                    | What this project does                                       |
-| -------------------------------- | ------------------------------------------------------------ |
-| Servers to run your app          | Creates Kubernetes clusters on AWS (EKS) in Riyadh & Dubai   |
-| A database to store transactions | Creates encrypted PostgreSQL (RDS) with automatic backups    |
-| A firewall to block hackers      | Creates WAF — blocks all countries except Saudi Arabia & UAE |
-| Security cameras (audit logs)    | Creates CloudTrail — records every single action forever     |
-| A vault for encryption keys      | Creates KMS — every byte of data is encrypted                |
-| Monitoring dashboards            | Creates Prometheus + Grafana — see everything in real-time   |
-| Automatic deployments            | Creates ArgoCD — push to Git, cluster updates itself         |
-| Disaster recovery                | Spins up everything in Dubai too, as a warm backup           |
-| SAMA compliance proof            | Every control maps to a specific SAMA regulation number      |
-
-### Why Code Instead of Clicking?
-
-When you click through the AWS console to set things up, three bad things happen:
-
-1. **You can't repeat it** — if you need a second environment (staging, prod), you click again, and probably forget something
-2. **You can't prove it** — an auditor asks "is your audit log retention set to 7 years?" — you can't prove it without code
-3. **You can't review it** — no one can check your work, no pull requests, no history
-
-With this project, every setting is in a `.tfvars` file. You open a PR, someone reviews it, it gets applied automatically. Full history. Full audit trail. Full reproducibility.
-
-### Who Built This For?
-
-This is a **portfolio/reference implementation** for:
-
-- Cloud Architects who want to show they can design fintech infrastructure
-- DevOps/Platform Engineers targeting roles at STC Pay, Urway, Tamara, or traditional banks in KSA
-- Compliance teams who want working code, not just policy documents
-- Anyone studying how production banking infrastructure actually works
-
----
 
 ## Behind the Scenes — What Actually Happens
 
