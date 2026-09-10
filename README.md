@@ -6,554 +6,51 @@
 ---
 
 ## Table of Contents
-1, [What Is This Project?](#what-is-this-project)
-2. [How This Works — Step by Step](#how-this-works--step-by-step)
-3. [Behind the Scenes — What Actually Happens](#behind-the-scenes--what-actually-happens)
-4. [The ONE File You Need to Edit](#the-one-file-you-need-to-edit)
-5. [Project Overview](#project-overview)
-6. [Architecture Overview](#architecture-overview)
-7. [SAMA Compliance Mapping](#sama-compliance-mapping)
-8. [Prerequisites](#prerequisites)
-9. [Quick Start](#quick-start)
-10. [Variable Configuration](#variable-configuration)
-11. [Environment Strategy](#environment-strategy)
-12. [Security Posture](#security-posture)
-13. [Observability Guide](#observability-guide)
-14. [Disaster Recovery](#disaster-recovery)
-15. [Cost Optimization](#cost-optimization)
-16. [Troubleshooting](#troubleshooting)
-17. [Roadmap](#roadmap)
+1. [Overview](#overview)
+2. [Architecture Overview](#architecture-overview)
+3. [SAMA Compliance Mapping](#sama-compliance-mapping)
+4. [Tech Stack & Capabilities](#tech-stack--capabilities)
+5. [Quick Start](#quick-start)
+6. [The One File You Need to Edit](#the-one-file-you-need-to-edit)
+7. [Environment Strategy](#environment-strategy)
+8. [Security Posture](#security-posture)
+9. [Observability Guide](#observability-guide)
+10. [Disaster Recovery](#disaster-recovery)
+11. [Cost Optimization](#cost-optimization)
+12. [Full Walkthrough — How This Works Step by Step](#full-walkthrough--how-this-works-step-by-step)
+13. [Implementation Deep Dive — Behind the Scenes](#implementation-deep-dive--behind-the-scenes)
+14. [Troubleshooting](#troubleshooting)
+15. [Roadmap](#roadmap)
+16. [License](#license)
 
 ---
 
----
+## Overview
 
-## What Is This Project?
+This repository is a **complete, production-ready, multi-region AWS Infrastructure-as-Code blueprint** for a simulated digital banking backend in the Kingdom of Saudi Arabia, architected to satisfy the **SAMA (Saudi Arabian Monetary Authority) Cyber Security Framework**. Everything is provisioned via Terraform and GitOps — zero manual console clicks, zero hardcoded values, full audit trail.
 
-### The Short Answer
+At a glance, it provisions:
 
-This is a **ready-to-deploy cloud infrastructure** for a Saudi digital bank — built entirely with code, with zero clicking in the AWS console, and full compliance with Saudi Arabia's banking security rules (SAMA regulations).
+| Requirement | What this project builds |
+| --- | --- |
+| Compute | Amazon EKS v1.29+ across Riyadh (`me-central-1`) and Dubai (`me-central-2`) |
+| Data | Multi-AZ RDS PostgreSQL 15+, encrypted, auto-rotated credentials |
+| Perimeter security | WAFv2 (financial-sector rule sets) geo-restricted to SA/AE, Shield Advanced |
+| Audit trail | CloudTrail + S3 Object Lock (COMPLIANCE mode), 7-year immutable retention |
+| Encryption | KMS CMK envelope encryption, automatic annual rotation |
+| Observability | Prometheus, Grafana, CloudWatch Container Insights, Datadog APM, PagerDuty |
+| Delivery | ArgoCD (App of Apps, HA Redis Sentinel) + GitHub Actions CI/CD |
+| DR | Active-passive cross-region failover, RTO < 4h / RPO < 1h |
 
-### The Honest Explanation (No Jargon)
+**Why code instead of console clicks:** manual AWS console setup can't be repeated reliably across environments, can't be proven to an auditor, and can't be peer-reviewed. Every setting here lives in one `.tfvars` file, goes through a PR, and is applied via CI — giving full history, full audit trail, full reproducibility.
 
-Imagine you want to build the tech behind an app like STC Pay or Urway. Before you can write a single line of banking app code, you need:
-
-| What you need                    | What this project does                                       |
-| -------------------------------- | ------------------------------------------------------------ |
-| Servers to run your app          | Creates Kubernetes clusters on AWS (EKS) in Riyadh & Dubai   |
-| A database to store transactions | Creates encrypted PostgreSQL (RDS) with automatic backups    |
-| A firewall to block hackers      | Creates WAF — blocks all countries except Saudi Arabia & UAE |
-| Security cameras (audit logs)    | Creates CloudTrail — records every single action forever     |
-| A vault for encryption keys      | Creates KMS — every byte of data is encrypted                |
-| Monitoring dashboards            | Creates Prometheus + Grafana — see everything in real-time   |
-| Automatic deployments            | Creates ArgoCD — push to Git, cluster updates itself         |
-| Disaster recovery                | Spins up everything in Dubai too, as a warm backup           |
-| SAMA compliance proof            | Every control maps to a specific SAMA regulation number      |
-
-### Why Code Instead of Clicking?
-
-When you click through the AWS console to set things up, three bad things happen:
-
-1. **You can't repeat it** — if you need a second environment (staging, prod), you click again, and probably forget something
-2. **You can't prove it** — an auditor asks "is your audit log retention set to 7 years?" — you can't prove it without code
-3. **You can't review it** — no one can check your work, no pull requests, no history
-
-With this project, every setting is in a `.tfvars` file. You open a PR, someone reviews it, it gets applied automatically. Full history. Full audit trail. Full reproducibility.
-
-### Who Built This For?
-
-This is a **portfolio/reference implementation** for:
-
-- Cloud Architects who want to show they can design fintech infrastructure
-- DevOps/Platform Engineers targeting roles at STC Pay, Urway, Tamara, or traditional banks in KSA
-- Compliance teams who want working code, not just policy documents
-- Anyone studying how production banking infrastructure actually works
-
----
-
-
-## How This Works — Step by Step
-
-> Think of this like building a bank branch — but instead of bricks, you're using code. And instead of one branch, you're building two at the same time (one in Riyadh, one in Dubai), with security guards, cameras, vaults, and alarms all set up automatically.
-
-Here's what happens from the moment you write code to the moment your banking app is live and safe:
-
----
-
-### Step 1 — You write your configuration (not code, just settings)
-
-You open ONE file:
-
-```
-terraform/environments/dev/terraform.tfvars
-```
-
-This file is like a form you fill in. You answer questions like:
-
-- "What is this project called?" → `project_name = "saudi-bank-backend"`
-- "Which region should be the main one?" → `primary_region = "me-central-1"` (Riyadh)
-- "How many servers do I want?" → `desired_capacity = 2`
-- "What's my alert email?" → `alert_email = "alerts@mybank.com"`
-
-**You never touch any other file.** Everything else reads from this one file automatically.
-
----
-
-### Step 2 — You run the pre-flight check
-
-```bash
-make preflight ENV=dev
-```
-
-The computer checks:
-
-- ✅ Are you logged into AWS?
-- ✅ Do you have Terraform installed?
-- ✅ Do you have enough AWS quota (slots) to build this stuff?
-- ✅ Is your AWS account allowed to create VPCs, EKS clusters, RDS databases?
-
-If anything fails, it tells you exactly what to fix — before wasting any time.
-
----
-
-### Step 3 — You create a safe place to save progress
-
-```bash
-make bootstrap ENV=dev
-```
-
-Terraform needs to remember what it has already built (so it doesn't build it twice). This step creates:
-
-- An **S3 bucket** → like a save file for your infrastructure
-- A **DynamoDB table** → like a lock that says "someone is working, don't touch"
-
-Both of these are named automatically from your config file. You don't pick names manually.
-
----
-
-### Step 4 — Phase 1: Build the physical cloud infrastructure
-
-```bash
-make infra ENV=dev
-```
-
-Now the real building begins. Terraform reads your config file and creates everything in AWS, in the right order:
-
-1. **Networking first** → Creates the virtual data center (VPC), splits it into 3 zones (public/private/database), creates NAT Gateways so private servers can reach the internet
-2. **Security next** → Creates the firewall (WAF), the threat detector (GuardDuty), the key vault (KMS), the audit system (CloudTrail)
-3. **Compliance** → Creates the tamper-proof audit log bucket with 7-year lock, Config rules to monitor everything
-4. **Database** → Creates PostgreSQL with encryption and automatic password rotation every 30 days
-5. **EKS Cluster** → Creates the Kubernetes cluster (the brain that runs all your banking apps), fully private (no one can reach it from the internet directly)
-
-⏱️ This takes about 20–40 minutes.
-
----
-
-### Step 5 — Phase 2: Install the software on top
-
-```bash
-make k8s ENV=dev
-```
-
-Now that the servers exist, this installs the management tools inside the Kubernetes cluster:
-
-1. **ArgoCD** → The robot that watches your Git repo and automatically pushes code changes to the cluster
-2. **Prometheus** → Collects numbers (metrics) from every service, every second
-3. **Grafana** → Turns those numbers into beautiful dashboards
-
----
-
-### Step 6 — ArgoCD syncs your banking apps
-
-```bash
-make argocd-sync-dev
-```
-
-ArgoCD reads the Kubernetes YAML files from your Git repository and deploys them to the EKS cluster. Every time you push code to Git, ArgoCD automatically updates the running apps. **No manual deployment ever again.**
-
----
-
-### Step 7 — Traffic flows safely to your users
-
-From this point, here's what happens when a customer opens your banking app:
-
-1. Customer's phone hits **Route53** (DNS — like a phone book that finds the right address)
-2. Route53 sends them to **WAF** (firewall — checks if the request is from Saudi Arabia or UAE, blocks everything else)
-3. WAF passes safe traffic to the **Load Balancer** (traffic director)
-4. Load Balancer sends it to your **EKS pods** (the running app containers)
-5. The app reads/writes to **RDS PostgreSQL** (the encrypted database)
-6. Every single action is logged to **CloudTrail** → stored forever (7 years) in a tamper-proof S3 bucket
-
----
-
-### Step 8 — Monitoring watches everything 24/7
-
-- **Prometheus** scrapes metrics every 15 seconds from every pod
-- **Grafana** shows dashboards: request rates, error rates, CPU usage, memory
-- **CloudWatch** monitors the AWS services themselves
-- **PagerDuty** wakes someone up at 3am if something breaks
-- **GuardDuty** watches for hackers, suspicious logins, data exfiltration attempts
-
----
-
-### Step 9 — If Riyadh dies, Dubai takes over automatically
-
-- Route53 health checks ping the Riyadh load balancer every 30 seconds
-- If Riyadh fails to respond → Route53 automatically switches DNS to the **Dubai** load balancer
-- The Dubai EKS cluster is already running (ArgoCD keeps it in sync)
-- The Dubai RDS replica gets promoted to a full writer database
-- Customers experience a brief hiccup, then everything works again from Dubai
-
----
-
-### ✅ Result: A running, secure, compliant banking backend
-
-You filled in one config file. You ran 4 commands. You now have:
-
-- Two Kubernetes clusters (Riyadh + Dubai)
-- An encrypted PostgreSQL database
-- A firewall that blocks non-Saudi/UAE traffic
-- 7 years of tamper-proof audit logs
-- Automatic threat detection
-- Real-time monitoring dashboards
-- GitOps deployment pipeline
-- Automatic failover to Dubai if Riyadh goes down
-
-
-## Behind the Scenes — What Actually Happens
-
-> This section walks through every layer of the system, what each piece does, and why it exists. No hand-waving.
-
-### Layer 1: Your Config File → Terraform Variables
-
-When you run any `make` command, this is what happens under the hood:
-
-```
-terraform/environments/dev/terraform.tfvars
-        ↓ (Terraform reads this)
-terraform/variables.tf
-        ↓ (defines types, validation rules)
-terraform/main.tf
-        ↓ (passes values to each module)
-terraform/modules/networking/
-terraform/modules/security/
-terraform/modules/compliance/
-terraform/modules/database/
-terraform/modules/eks/
-terraform/modules/observability/
-terraform/modules/gitops/
-        ↓ (each module creates real AWS resources)
-Your running infrastructure in AWS
-```
-
-Nothing is hardcoded. `main.tf` just says `var.networking.cidr_blocks` — it always reads from your config file.
-
----
-
-### Layer 2: Networking — The Virtual Data Center
-
-When the networking module runs, it creates:
-
-```
-AWS Region (me-central-1, Riyadh)
-└── VPC (10.0.0.0/16) — your private network in the cloud
-    ├── Public Subnets (10.0.0.0/20)    ← Load Balancers live here
-    ├── Private Subnets (10.0.16.0/20)  ← Your app pods live here
-    └── Database Subnets (10.0.32.0/20) ← Database lives here (totally isolated)
-```
-
-- **3 Availability Zones** → if one AWS data center in Riyadh has a power cut, the other two keep running
-- **NAT Gateway** → private pods can download software from the internet but no one from the internet can reach them directly
-- **VPC Flow Logs** → every network packet that enters or leaves is logged (required by SAMA)
-
----
-
-### Layer 3: Security — The Guards and Locks
-
-The security module creates multiple independent defense systems:
-
-**KMS (Key Management Service)**
-
-- Like a master safe combination. Every piece of data — database records, S3 files, Kubernetes secrets — is encrypted with a key that only KMS controls
-- Key rotates automatically every year
-- Even if someone steals your hard drive from AWS (impossible, but hypothetically), the data is unreadable
-
-**WAF (Web Application Firewall)**
-
-- Sits in front of your load balancer
-- Rejects all traffic from countries other than Saudi Arabia (`SA`) and UAE (`AE`) — configurable in your tfvars
-- Blocks SQL injection attacks: someone trying to type `'; DROP TABLE users;--` into your login form → rejected
-- Blocks XSS attacks: someone injecting JavaScript into your form fields → rejected
-- Rate limits: if one IP makes more than 3,000 requests in 5 minutes → temporarily blocked
-
-**GuardDuty**
-
-- AWS's AI-powered threat detector
-- Analyzes CloudTrail logs, VPC Flow Logs, DNS logs
-- Raises alerts for: unusual API calls at odd hours, known malicious IP addresses, crypto mining behavior on your servers, data exfiltration attempts
-
-**Security Hub**
-
-- Aggregates all security findings from GuardDuty, Config, and Inspector into one dashboard
-- Scores your account against CIS Foundations Benchmark (the gold standard for cloud security)
-
----
-
-### Layer 4: Compliance — The Paper Trail That Can't Be Erased
-
-The compliance module creates:
-
-**CloudTrail**
-
-- Records every single AWS API call: who called it, from where, when, what parameters, what response
-- Example: "User `terraform` called `CreateSecurityGroup` at 14:32:07 from IP `1.2.3.4`"
-- Stored in S3 with **Object Lock in COMPLIANCE mode** → no one — not even the AWS root account — can delete or modify these logs for 7 years
-- This directly satisfies SAMA requirements 3.2.1 and 3.2.2
-
-**AWS Config**
-
-- Continuously monitors your AWS resources
-- If someone manually changes a security group rule (bypassing Terraform), Config detects it and raises a finding
-- Records a full history of every resource configuration over time
-
-**S3 Bucket Lifecycle**
-
-- Logs stay in S3 Standard for the first 90 days (fast access)
-- After 90 days → moves to Glacier (cheaper, slower)
-- After 180 days → moves to Deep Archive (cheapest storage)
-- After 7 years → deleted (SAMA minimum met)
-
----
-
-### Layer 5: Database — Where the Money Data Lives
-
-The database module creates:
-
-**RDS PostgreSQL**
-
-- Multi-AZ in production: one primary database + one standby. If the primary fails, AWS automatically promotes the standby in ~60 seconds
-- Encrypted at rest using the KMS key created in the security module
-- Automatic backups every day, retained for 7 days (dev) or 35 days (prod)
-- Performance Insights: see exactly which SQL query is slow and why
-
-**Secrets Manager**
-
-- The database password is never in your code or config files
-- Secrets Manager holds the password and rotates it automatically every 30 days
-- Your EKS pods retrieve the password at runtime — they never store it
-
----
-
-### Layer 6: EKS — The Kubernetes Cluster (Where Your App Runs)
-
-The EKS module creates:
-
-**The Control Plane (private)**
-
-- The Kubernetes API server is only accessible from within the VPC — not from the internet
-- To manage the cluster, you go through a bastion host (a jump server) in the public subnet
-- This means even if someone has your kubeconfig file, they can't use it from home — they need VPN or bastion access first
-
-**Node Groups (worker servers)**
-
-- Dev: `t3.medium` Spot instances (cheap, can be interrupted — fine for dev)
-- Prod: On-Demand instances (stable, never interrupted)
-- Auto-scaling: Kubernetes automatically adds nodes when load increases, removes them when load drops
-
-**IRSA (IAM Roles for Service Accounts)**
-
-- Instead of giving every pod full AWS permissions, each specific workload gets only what it needs:
-  - The load balancer controller: can only touch load balancers
-  - External DNS: can only modify Route53 records
-  - The app pods: no AWS permissions at all unless explicitly granted
-- This is called "least privilege" — even if a pod is hacked, the blast radius is minimal
-
----
-
-### Layer 7: Observability — The Control Room
-
-**Prometheus (metric collector)**
-
-- Every pod exposes a `/metrics` endpoint
-- Prometheus scrapes all of them every 15 seconds
-- Stores time-series data: "at 14:32:00, pod X used 342MB RAM and handled 1,203 req/sec"
-
-**Grafana (dashboard)**
-
-- Reads from Prometheus and draws graphs
-- Pre-built dashboards: node health, pod restarts, request latency (p50/p95/p99), error rates, database connections
-- Access via port-forward: `kubectl port-forward svc/grafana -n monitoring 3000:80`
-
-**CloudWatch Container Insights**
-
-- AWS's own monitoring for EKS
-- Captures pod logs automatically — no log configuration needed in your apps
-- Logs Insights lets you search logs with SQL-like queries
-
-**PagerDuty**
-
-- When a CloudWatch alarm fires (e.g., error rate > 5%, or CPU > 80%), it calls/texts/emails the on-call engineer
-- Configured via your tfvars: `pagerduty_service_name = "banking-prod-alerts"`
-
----
-
-### Layer 8: GitOps — How Code Gets to Production
-
-**ArgoCD (the deployment robot)**
-
-- Watches your Git repository (the URL you put in `gitops_repo_url`)
-- Every time someone merges a PR that changes a Kubernetes YAML file, ArgoCD sees it within ~3 minutes
-- ArgoCD compares the desired state (Git) with the actual state (running cluster)
-- If they differ → ArgoCD applies the changes automatically
-- `enable_self_heal = true` → if someone manually `kubectl apply`s something wrong, ArgoCD reverts it within minutes
-
-**GitHub Actions (CI/CD pipeline)**
-
-- When you push code → Actions run automatically:
-  1. Build the Docker image
-  2. Run SAST (SonarQube) — scans your code for security vulnerabilities
-  3. Run Trivy — scans the Docker image for known CVEs
-  4. Run `terraform plan` — shows what infrastructure changes will happen
-  5. If all passes → merge PR → ArgoCD deploys
-
----
-
-### Layer 9: Disaster Recovery — What Happens When Riyadh Goes Down
-
-| Event                                    | Automatic or Manual         | Time        |
-| ---------------------------------------- | --------------------------- | ----------- |
-| Route53 detects Riyadh ALB unhealthy     | Automatic                   | ~30 seconds |
-| DNS switches to Dubai ALB                | Automatic                   | ~60 seconds |
-| Dubai EKS cluster serves traffic         | Automatic (already running) | Immediate   |
-| DBA promotes Dubai RDS replica to writer | Manual                      | ~15 minutes |
-| Full DR verified via smoke tests         | Manual                      | ~30 minutes |
-
-**RTO (Recovery Time Objective): < 4 hours**
-**RPO (Recovery Point Objective): < 1 hour** (RDS replication lag)
-
----
-
-## The ONE File You Need to Edit
-
-> The entire project is designed so that **you only ever need to edit one file per environment**. Everything else reads from it automatically. No hardcoded values. Ever.
-
-The file is:
-
-```
-terraform/environments/dev/terraform.tfvars
-```
-
-(and similarly `staging/terraform.tfvars` and `prod/terraform.tfvars` for those environments)
-
-### Minimum Changes Before Running
-
-Only **5 values** need to be changed from their defaults to make this yours:
-
-```hcl
-# 1. Your project name (used in ALL resource names)
-project_name = "my-bank-name"
-
-# 2. Update common_tags with your team info
-common_tags = {
-  Owner      = "your-name"
-  CostCenter = "your-team"
-}
-
-# 3. Your Git repo URL (ArgoCD will watch this)
-gitops = {
-  gitops_repo_url = "https://github.com/YOUR-ORG/YOUR-REPO.git"
-  ...
-}
-
-# 4. A globally unique S3 bucket name for Terraform state
-state_backend = {
-  bucket_name         = "my-bank-name-tfstate-dev"   # must be globally unique
-  dynamodb_table_name = "my-bank-name-tflock-dev"
-  ...
-}
-
-# 5. Your alert email
-observability = {
-  alert_email = "your-email@example.com"
-  ...
-}
-```
-
-**That's it.** Every other value has a sensible default. Every other file in the project reads from this one file. No hunting through modules, no grepping for IP addresses, no editing multiple files.
-
-### How "Zero Hardcoded Values" Works
-
-```
-terraform/environments/dev/terraform.tfvars   ← you set values HERE
-        ↓
-terraform/variables.tf                         ← defines what types are allowed + validates
-        ↓
-terraform/main.tf                              ← passes var.xyz to each module
-        ↓
-terraform/modules/networking/main.tf           ← uses var.cidr_blocks (no literal IPs)
-terraform/modules/security/main.tf             ← uses var.allowed_countries (no literal "SA","AE")
-terraform/modules/eks/main.tf                  ← uses var.cluster_version (no literal "1.29")
-```
-
-If you want to change the Kubernetes version from `1.29` to `1.30`, you change it **once** in `terraform.tfvars`. Every module picks it up. No search-and-replace across 20 files.
-
-### Variable Validation
-
-The variables are not just passed through blindly. `variables.tf` validates every input:
-
-```hcl
-validation {
-  condition     = var.compliance.audit_retention_years >= 7
-  error_message = "SAMA compliance requires a minimum of 7 years audit retention."
-}
-```
-
-If you accidentally type `audit_retention_years = 3`, Terraform will **refuse to run** and tell you why. Safety built in.
-
----
-
-## Project Overview
-
-This repository contains a **complete, production-ready, multi-region AWS infrastructure project** designed for a simulated digital banking backend operating in the Kingdom of Saudi Arabia (KSA). It is architected from the ground up to meet the stringent requirements of the **Saudi Arabian Monetary Authority (SAMA)** Cyber Security Framework, while remaining fully deployable, auditable, and maintainable by modern Platform Engineering and DevOps teams.
-
-### What Is This Project?
-
-This project is an **Infrastructure-as-Code (IaC) blueprint** that provisions an entire cloud-native digital banking platform across multiple AWS regions (Riyadh `me-central-1` and Dubai `me-central-2` for cross-region resiliency). It encompasses:
-
-- **Networking**: Multi-AZ VPCs with 3-tier subnet isolation, Transit Gateway cross-region connectivity, and Route53 health checks.
-- **Compute**: Amazon EKS v1.29+ with managed node groups, IRSA (IAM Roles for Service Accounts), and private endpoint-only access.
-- **Security**: WAFv2 with financial-sector rule sets, AWS Shield Advanced, GuardDuty, Security Hub, and KMS CMK envelope encryption.
-- **Compliance**: Centralized CloudTrail and AWS Config with S3 Object Lock (COMPLIANCE mode) enforcing 7-year immutable audit retention.
-- **Database**: Multi-AZ RDS PostgreSQL 15+ with encryption, Secrets Manager auto-rotation, and performance insights.
-- **Observability**: Prometheus, Grafana, CloudWatch Container Insights, Datadog APM, and PagerDuty integrations.
-- **GitOps**: ArgoCD with HA Redis Sentinel, App of Apps pattern, and environment-specific ApplicationSets.
-
-### Why Use This Approach?
-
-Traditional infrastructure provisioning is manual, error-prone, and nearly impossible to audit at scale. This project addresses those challenges through:
-
-- **Variable-Driven Configuration**: Every parameter is externalized into `terraform.tfvars` files. There are zero hardcoded values in any module, enabling instant environment replication (dev → staging → prod) with full confidence.
-- **Modular Architecture**: Each concern (networking, security, compliance, etc.) is encapsulated in its own Terraform module. Teams can upgrade, patch, or replace individual modules without cascading changes.
-- **Compliance by Design**: SAMA requirements are not retrofitted; they are embedded into the architecture. Audit logs, encryption, access controls, and retention policies are provisioned automatically.
-- **GitOps Native**: Infrastructure and application delivery are unified in Git. ArgoCD ensures the live cluster state matches the desired state declared in version control, eliminating configuration drift.
-- **Cost Conscious**: Dev environments use Spot instances, while production leverages right-sized On-Demand and Savings Plans recommendations. Resource tagging is enforced for FinOps chargeback.
-
-### Who Is This For?
-
-This project is ideal for:
-
-- **Cloud Architects** designing banking or fintech platforms in the Middle East.
-- **DevOps / Platform Engineers** building internal developer platforms (IDPs) with strict compliance mandates.
-- **Compliance Officers** seeking verifiable, code-based evidence of control implementation.
-- **Recruiters & Hiring Managers** evaluating candidates for STC Pay, Urway, Tamara, or traditional bank IT departments in Riyadh and Dubai.
+**Built for:** Cloud Architects and DevOps/Platform Engineers targeting fintech and banking infrastructure roles (STC Pay, Urway, Tamara, or traditional KSA/UAE banks), compliance teams who want working code instead of policy documents, and anyone studying how production banking infrastructure is actually built.
 
 ---
 
 ## Architecture Overview
 
-The architecture follows an **active-passive multi-region design** optimized for the Saudi financial sector. The primary region (Riyadh) handles live traffic, while the secondary region (Dubai) serves as a warm standby for disaster recovery.
-
-### Mermaid Diagram
+The architecture follows an **active-passive multi-region design** optimized for the Saudi financial sector. The primary region (Riyadh) handles live traffic; the secondary region (Dubai) is a warm standby for disaster recovery.
 
 ```mermaid
 graph TB
@@ -630,197 +127,202 @@ graph TB
 
 ### Data Flow
 
-1. **Ingress**: Customer requests hit Route53, which routes to the Riyadh ALB. Route53 health checks monitor endpoint health; if Riyadh fails, DNS fails over to Dubai.
-2. **Edge Security**: WAFv2 inspects all HTTP(S) traffic, blocking SQL injection, XSS, and requests from non-KSA/UAE IPs. AWS Shield Advanced protects against DDoS.
-3. **Compute**: Traffic terminates at the ALB and is forwarded to EKS pods running in private subnets. EKS is private-endpoint only; no direct internet access to the Kubernetes API.
-4. **Data**: Application pods connect to RDS PostgreSQL in database subnets. All data at rest is encrypted with KMS CMK. Secrets (DB credentials) are rotated automatically every 30 days via Secrets Manager.
-5. **Audit**: Every AWS API call is recorded by CloudTrail and stored in an S3 bucket with Object Lock COMPLIANCE mode, preventing deletion or overwrite for 7 years.
-6. **Observability**: Prometheus scrapes metrics, Grafana renders dashboards, Datadog collects APM traces, and CloudWatch alarms trigger PagerDuty incidents for on-call response.
-7. **Delivery**: Developers push code to GitHub. Actions run build, SAST (SonarQube), container scan (Trivy), and Terraform plan. ArgoCD syncs the new manifests to the cluster.
+1. **Ingress**: Requests hit Route53, which routes to the Riyadh ALB. Route53 health checks fail traffic over to Dubai if Riyadh becomes unhealthy.
+2. **Edge security**: WAFv2 inspects all HTTP(S) traffic, blocking SQL injection, XSS, and requests from non-KSA/UAE IPs. Shield Advanced protects against DDoS.
+3. **Compute**: Traffic terminates at the ALB and forwards to EKS pods in private subnets. EKS is private-endpoint only — no direct internet access to the Kubernetes API.
+4. **Data**: Pods connect to RDS PostgreSQL in isolated database subnets. All data at rest is KMS-encrypted; DB credentials rotate automatically every 30 days via Secrets Manager.
+5. **Audit**: Every AWS API call is recorded by CloudTrail into an S3 bucket with Object Lock COMPLIANCE mode — undeletable, unmodifiable, for 7 years.
+6. **Observability**: Prometheus scrapes metrics, Grafana renders dashboards, Datadog collects APM traces, CloudWatch alarms page on-call via PagerDuty.
+7. **Delivery**: Developers push to GitHub. Actions run build → SAST (SonarQube) → container scan (Trivy) → `terraform plan`. ArgoCD syncs the resulting manifests to the cluster.
 
 ---
 
 ## SAMA Compliance Mapping
 
-The Saudi Arabian Monetary Authority (SAMA) Cyber Security Framework mandates specific controls for financial institutions. The following table maps each Terraform resource to its simulated SAMA requirement:
+Each Terraform resource maps to a specific SAMA Cyber Security Framework control:
 
-| SAMA Requirement | Control Description              | Terraform Resources                                                                                                |
-| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **3.2.1**        | Audit Logs Retention (7 Years)   | `aws_cloudtrail.main`, `aws_s3_bucket.audit`, `aws_s3_bucket_lifecycle_configuration.audit`                        |
-| **3.2.2**        | Audit Log Integrity              | `aws_s3_bucket_object_lock_configuration.audit`, `aws_s3_bucket_policy.audit_readonly_root`                        |
-| **3.3.1**        | Encryption at Rest               | `aws_kms_key.main`, `aws_db_instance.main.storage_encrypted`, `aws_s3_bucket_server_side_encryption_configuration` |
-| **3.3.2**        | Encryption in Transit            | `aws_s3_bucket_policy.audit` (TLS enforcement), ALB HTTPS listeners                                                |
-| **3.4.1**        | Access Control (Least Privilege) | IRSA roles (`aws_iam_role.alb_controller`, `aws_iam_role.external_dns`), `aws_iam_role.config`                     |
-| **3.4.2**        | Privileged Access Monitoring     | `aws_guardduty_detector.main`, `aws_securityhub_account.main`, `aws_cloudwatch_metric_alarm.failed_logins`         |
-| **3.5.1**        | Network Segmentation             | `aws_subnet.public`, `aws_subnet.private`, `aws_subnet.database`, `aws_security_group.database`                    |
-| **3.5.2**        | Network Intrusion Detection      | `aws_wafv2_web_acl.main`, `aws_guardduty_detector.main`                                                            |
-| **3.6.1**        | Vulnerability Management         | GitHub Actions Trivy scan, `aws_securityhub_standards_subscription.fsbp`                                           |
-| **3.7.1**        | Backup & Recovery                | `aws_db_instance.main.backup_retention_period`, S3 versioning, DynamoDB PITR                                       |
-| **3.8.1**        | Change Management                | GitOps via ArgoCD, Terraform state locking (`aws_dynamodb_table`), GitHub PR reviews                               |
-| **3.9.1**        | Incident Response                | PagerDuty integration, CloudWatch alarms, GuardDuty findings export                                                |
-| **3.10.1**       | Business Continuity              | Multi-AZ RDS, multi-region EKS, Route53 failover, cross-region S3 replication                                      |
+| SAMA Requirement | Control Description | Terraform Resources |
+| --- | --- | --- |
+| **3.2.1** | Audit Logs Retention (7 Years) | `aws_cloudtrail.main`, `aws_s3_bucket.audit`, `aws_s3_bucket_lifecycle_configuration.audit` |
+| **3.2.2** | Audit Log Integrity | `aws_s3_bucket_object_lock_configuration.audit`, `aws_s3_bucket_policy.audit_readonly_root` |
+| **3.3.1** | Encryption at Rest | `aws_kms_key.main`, `aws_db_instance.main.storage_encrypted`, `aws_s3_bucket_server_side_encryption_configuration` |
+| **3.3.2** | Encryption in Transit | `aws_s3_bucket_policy.audit` (TLS enforcement), ALB HTTPS listeners |
+| **3.4.1** | Access Control (Least Privilege) | IRSA roles (`aws_iam_role.alb_controller`, `aws_iam_role.external_dns`), `aws_iam_role.config` |
+| **3.4.2** | Privileged Access Monitoring | `aws_guardduty_detector.main`, `aws_securityhub_account.main`, `aws_cloudwatch_metric_alarm.failed_logins` |
+| **3.5.1** | Network Segmentation | `aws_subnet.public`, `aws_subnet.private`, `aws_subnet.database`, `aws_security_group.database` |
+| **3.5.2** | Network Intrusion Detection | `aws_wafv2_web_acl.main`, `aws_guardduty_detector.main` |
+| **3.6.1** | Vulnerability Management | GitHub Actions Trivy scan, `aws_securityhub_standards_subscription.fsbp` |
+| **3.7.1** | Backup & Recovery | `aws_db_instance.main.backup_retention_period`, S3 versioning, DynamoDB PITR |
+| **3.8.1** | Change Management | GitOps via ArgoCD, Terraform state locking (`aws_dynamodb_table`), GitHub PR reviews |
+| **3.9.1** | Incident Response | PagerDuty integration, CloudWatch alarms, GuardDuty findings export |
+| **3.10.1** | Business Continuity | Multi-AZ RDS, multi-region EKS, Route53 failover, cross-region S3 replication |
 
 ---
 
-## Prerequisites
+## Tech Stack & Capabilities
 
-Before deploying this infrastructure, ensure the following tools are installed and configured:
+- **Networking**: Multi-AZ VPCs with 3-tier subnet isolation, Transit Gateway cross-region connectivity, Route53 health checks.
+- **Compute**: Amazon EKS v1.29+ with managed node groups, IRSA, private-endpoint-only access.
+- **Security**: WAFv2 (financial-sector rule sets), Shield Advanced, GuardDuty, Security Hub, KMS CMK envelope encryption.
+- **Compliance**: Centralized CloudTrail + AWS Config, S3 Object Lock (COMPLIANCE mode), 7-year immutable audit retention.
+- **Database**: Multi-AZ RDS PostgreSQL 15+, encrypted, Secrets Manager auto-rotation, Performance Insights.
+- **Observability**: Prometheus, Grafana, CloudWatch Container Insights, Datadog APM, PagerDuty.
+- **GitOps**: ArgoCD (HA Redis Sentinel, App of Apps pattern, environment-specific ApplicationSets).
 
-| Tool       | Minimum Version | Purpose                                |
-| ---------- | --------------- | -------------------------------------- |
-| AWS CLI    | 2.13+           | Interact with AWS APIs                 |
-| Terraform  | 1.7.0+          | Infrastructure provisioning            |
-| kubectl    | 1.29+           | Kubernetes cluster management          |
-| Helm       | 3.13+           | Kubernetes package management          |
-| GitHub CLI | 2.30+           | GitHub Actions & repository management |
-| jq         | 1.6+            | JSON parsing in shell scripts          |
-| tflint     | 0.50+           | Terraform linting                      |
-| Checkov    | 3.0+            | Policy-as-code security scanning       |
-
-### AWS Account Requirements
-
-- Access to `me-central-1` (Riyadh) and `me-central-2` (Dubai) regions.
-- Service quotas: minimum 5 VPCs, 3 EKS clusters, and 5 NAT Gateways per region.
-- IAM permissions to create roles, policies, KMS keys, VPCs, EKS clusters, RDS instances, and S3 buckets.
-- An OIDC identity provider configured for GitHub Actions (see `policies/oidc-trust-policies.json`).
+**Design principles:**
+- **Variable-driven configuration** — every parameter externalized to `terraform.tfvars`; zero hardcoded values in any module.
+- **Modular architecture** — networking, security, compliance, database, etc. are independent Terraform modules; teams can patch one without cascading changes.
+- **Compliance by design** — audit logs, encryption, access controls, and retention are provisioned automatically, not retrofitted.
+- **GitOps native** — ArgoCD keeps live cluster state matched to Git, eliminating drift.
+- **Cost conscious** — Spot instances in dev, right-sized On-Demand + Savings Plans in prod, enforced tagging for FinOps chargeback.
 
 ---
 
 ## Quick Start
 
-Follow these five steps to go from `git clone` to a running infrastructure:
+### Prerequisites
 
-### Step 1: Clone the Repository
+| Tool | Minimum Version | Purpose |
+| --- | --- | --- |
+| AWS CLI | 2.13+ | Interact with AWS APIs |
+| Terraform | 1.7.0+ | Infrastructure provisioning |
+| kubectl | 1.29+ | Kubernetes cluster management |
+| Helm | 3.13+ | Kubernetes package management |
+| GitHub CLI | 2.30+ | GitHub Actions & repository management |
+| jq | 1.6+ | JSON parsing in shell scripts |
+| tflint | 0.50+ | Terraform linting |
+| Checkov | 3.0+ | Policy-as-code security scanning |
+
+AWS account also needs: access to `me-central-1` and `me-central-2`, quotas for ≥5 VPCs / 3 EKS clusters / 5 NAT Gateways per region, IAM permissions to create the relevant resource types, and an OIDC identity provider for GitHub Actions (`policies/oidc-trust-policies.json`).
+
+### Steps
 
 ```bash
+# 1. Clone
 git clone https://github.com/your-org/saudi-bank-backend.git
 cd saudi-bank-backend
-```
 
-### Step 2: Configure Variables
+# 2. Configure — edit ONLY terraform/environments/dev/terraform.tfvars
+#    (project_name, common_tags, gitops_repo_url, state_backend.bucket_name, alert_email)
 
-Edit **only** `terraform/environments/dev/terraform.tfvars`. At minimum, update:
-
-- `project_name`
-- `common_tags` (Owner, CostCenter)
-- `gitops.gitops_repo_url` (point to your Git repo)
-- `state_backend.bucket_name` (globally unique S3 bucket name)
-- `observability.alert_email`
-
-> **You do not need to edit any other file in the project.**
-
-### Step 3: Run Pre-Flight Checks
-
-```bash
+# 3. Pre-flight checks (AWS creds, tool versions, service quotas)
 make preflight ENV=dev
-```
 
-This validates AWS credentials, tool versions, and service quotas.
-
-### Step 4: Bootstrap the Backend
-
-```bash
+# 4. Bootstrap Terraform state backend (S3 + DynamoDB lock table)
 make bootstrap ENV=dev
-```
 
-This idempotently creates the S3 bucket and DynamoDB table for Terraform state.
+# 5. Deploy — two phases, because Kubernetes providers need a live cluster endpoint
+make infra ENV=dev   # VPC, EKS, RDS, KMS, WAF, CloudTrail, S3
+make k8s ENV=dev     # ArgoCD, Prometheus, Grafana via Helm
 
-### Step 5: Deploy (Two-Phase)
-
-Because Kubernetes providers require a live cluster endpoint, deployment is split into two phases:
-
-**Phase 1: AWS Infrastructure**
-
-```bash
-make infra ENV=dev
-```
-
-This creates VPC, subnets, EKS cluster, RDS, KMS, WAF, CloudTrail, and S3 buckets.
-
-**Phase 2: Kubernetes Addons**
-
-```bash
-make k8s ENV=dev
-```
-
-This deploys ArgoCD, Prometheus, Grafana, and other cluster addons via Helm.
-
-**Combined (convenience target):**
-
-```bash
+# Convenience target for dev:
 make deploy-dev
-```
 
-For staging and production:
-
-```bash
+# Staging / prod:
 make deploy-staging ENV=staging
-make deploy-prod ENV=prod
+make deploy-prod ENV=prod   # requires manual approval + GitHub Environment protection
 ```
 
-**Note**: Production requires manual approval via the Makefile prompt and GitHub Environment protection rules.
+Phase 1 (`make infra`) takes roughly 20–40 minutes. Production deploys require two reviewers and a 24-hour staging soak before promotion.
 
 ---
 
-## Variable Configuration
+## The One File You Need to Edit
 
-All variables are defined in `terraform/variables.tf` and overridden per environment in `terraform/environments/<env>/terraform.tfvars`.
+The entire project is designed so you only ever touch **one file per environment**:
 
-| Variable                            | Type           | Description                      | Example                              |
-| ----------------------------------- | -------------- | -------------------------------- | ------------------------------------ |
-| `project_name`                      | `string`       | Project name for resource naming | `"saudi-bank-backend"`               |
-| `environment`                       | `string`       | Deployment environment           | `"dev"`, `"staging"`, `"prod"`       |
-| `primary_region`                    | `string`       | Primary AWS region               | `"me-central-1"`                     |
-| `secondary_region`                  | `string`       | DR region                        | `"me-central-2"`                     |
-| `networking.cidr_blocks`            | `map(string)`  | VPC and subnet CIDRs             | `{ vpc = "10.0.0.0/16" }`            |
-| `networking.availability_zones`     | `list(string)` | AZs for subnet distribution      | `["me-central-1a", "me-central-1b"]` |
-| `eks.cluster_version`               | `string`       | Kubernetes version               | `"1.29"`                             |
-| `eks.node_instance_types`           | `list(string)` | EC2 instance types for nodes     | `["t3.medium"]`                      |
-| `eks.desired_capacity`              | `number`       | Desired node count               | `3`                                  |
-| `security.allowed_countries`        | `list(string)` | ISO country codes for WAF        | `["SA", "AE"]`                       |
-| `security.waf_rate_limit`           | `number`       | Requests per 5 min per IP        | `3000`                               |
-| `security.enable_shield_advanced`   | `bool`         | Enable AWS Shield Advanced       | `true` (prod)                        |
-| `compliance.audit_retention_years`  | `number`       | Audit log retention              | `7`                                  |
-| `compliance.enable_object_lock`     | `bool`         | Enable S3 Object Lock            | `true`                               |
-| `database.db_instance_class`        | `string`       | RDS instance class               | `"db.r6g.xlarge"`                    |
-| `database.backup_retention`         | `number`       | RDS backup retention days        | `35`                                 |
-| `observability.alert_email`         | `string`       | Alert recipient email            | `"alerts@example.com"`               |
-| `gitops.gitops_repo_url`            | `string`       | ArgoCD source repository         | `"https://github.com/org/repo.git"`  |
-| `gitops.argocd_version`             | `string`       | ArgoCD Helm chart version        | `"5.51.6"`                           |
-| `state_backend.bucket_name`         | `string`       | Terraform state S3 bucket        | `"my-tfstate-bucket"`                |
-| `state_backend.dynamodb_table_name` | `string`       | State lock table                 | `"my-tflock-table"`                  |
+```
+terraform/environments/dev/terraform.tfvars
+```
 
-**Validation**: Every variable includes validation blocks (e.g., CIDR format, environment whitelist, minimum retention). Terraform will fail fast with descriptive errors if invalid values are provided.
+(and the equivalent `staging/terraform.tfvars`, `prod/terraform.tfvars`)
+
+### Minimum changes required
+
+```hcl
+# 1. Project name — used in ALL resource names
+project_name = "my-bank-name"
+
+# 2. Team ownership tags
+common_tags = {
+  Owner      = "your-name"
+  CostCenter = "your-team"
+}
+
+# 3. Git repo ArgoCD will watch
+gitops = {
+  gitops_repo_url = "https://github.com/YOUR-ORG/YOUR-REPO.git"
+}
+
+# 4. Globally unique Terraform state bucket
+state_backend = {
+  bucket_name         = "my-bank-name-tfstate-dev"
+  dynamodb_table_name = "my-bank-name-tflock-dev"
+}
+
+# 5. Alert email
+observability = {
+  alert_email = "your-email@example.com"
+}
+```
+
+Every other value has a sensible default and every module reads from this single file — change the EKS version once here, and it propagates everywhere, no search-and-replace across modules.
+
+Variables are validated, not just passed through blindly:
+
+```hcl
+validation {
+  condition     = var.compliance.audit_retention_years >= 7
+  error_message = "SAMA compliance requires a minimum of 7 years audit retention."
+}
+```
+
+### Full Variable Reference
+
+| Variable | Type | Description | Example |
+| --- | --- | --- | --- |
+| `project_name` | `string` | Project name for resource naming | `"saudi-bank-backend"` |
+| `environment` | `string` | Deployment environment | `"dev"`, `"staging"`, `"prod"` |
+| `primary_region` | `string` | Primary AWS region | `"me-central-1"` |
+| `secondary_region` | `string` | DR region | `"me-central-2"` |
+| `networking.cidr_blocks` | `map(string)` | VPC and subnet CIDRs | `{ vpc = "10.0.0.0/16" }` |
+| `networking.availability_zones` | `list(string)` | AZs for subnet distribution | `["me-central-1a", "me-central-1b"]` |
+| `eks.cluster_version` | `string` | Kubernetes version | `"1.29"` |
+| `eks.node_instance_types` | `list(string)` | EC2 instance types for nodes | `["t3.medium"]` |
+| `eks.desired_capacity` | `number` | Desired node count | `3` |
+| `security.allowed_countries` | `list(string)` | ISO country codes for WAF | `["SA", "AE"]` |
+| `security.waf_rate_limit` | `number` | Requests per 5 min per IP | `3000` |
+| `security.enable_shield_advanced` | `bool` | Enable AWS Shield Advanced | `true` (prod) |
+| `compliance.audit_retention_years` | `number` | Audit log retention | `7` |
+| `compliance.enable_object_lock` | `bool` | Enable S3 Object Lock | `true` |
+| `database.db_instance_class` | `string` | RDS instance class | `"db.r6g.xlarge"` |
+| `database.backup_retention` | `number` | RDS backup retention days | `35` |
+| `observability.alert_email` | `string` | Alert recipient email | `"alerts@example.com"` |
+| `gitops.gitops_repo_url` | `string` | ArgoCD source repository | `"https://github.com/org/repo.git"` |
+| `gitops.argocd_version` | `string` | ArgoCD Helm chart version | `"5.51.6"` |
+| `state_backend.bucket_name` | `string` | Terraform state S3 bucket | `"my-tfstate-bucket"` |
+| `state_backend.dynamodb_table_name` | `string` | State lock table | `"my-tflock-table"` |
 
 ---
 
 ## Environment Strategy
 
-This project supports three environments: **dev**, **staging**, and **prod**.
+Three environments: **dev**, **staging**, **prod**.
 
-### Isolation Model
+### Isolation model
 
-Environments are isolated using a **combination of separate AWS accounts and VPC-level segregation**:
+- **Recommended**: separate AWS accounts per environment for the strongest blast-radius containment.
+- **Alternative** (smaller teams): same account, distinct VPCs with strict IAM boundaries. Each environment still gets its own VPC/subnet CIDRs, EKS cluster, RDS instance, S3 buckets, and DynamoDB lock table.
 
-- **Recommended**: Use separate AWS accounts per environment (dev account, staging account, prod account). This provides the strongest blast-radius containment.
-- **Alternative** (for smaller teams): Use the same AWS account but distinct VPCs with strict IAM boundaries. Each environment has its own:
-  - VPC and subnet CIDR ranges (no overlap)
-  - EKS cluster
-  - RDS instance
-  - S3 buckets (state + audit)
-  - DynamoDB lock table
-
-### Promotion Path
+### Promotion path
 
 ```
 Dev (auto-deploy) -> Staging (manual approval) -> Prod (two-person approval + 24h soak)
 ```
 
-- **Dev**: Every merge to `main` auto-deploys. Spot instances minimize cost.
-- **Staging**: Requires manual approval in GitHub Actions. Mirrors production sizing.
-- **Production**: Requires two reviewers and a 24-hour staging stability observation.
-
-### Backend Separation
+- **Dev**: every merge to `main` auto-deploys; Spot instances minimize cost.
+- **Staging**: requires manual GitHub Actions approval; mirrors production sizing.
+- **Production**: requires two reviewers and a 24-hour staging stability observation.
 
 Each environment has its own S3 state bucket and DynamoDB lock table, preventing state corruption and enabling parallel environment management.
 
@@ -828,59 +330,49 @@ Each environment has its own S3 state bucket and DynamoDB lock table, preventing
 
 ## Security Posture
 
-Security is not an afterthought; it is woven into every layer of this architecture.
+### Defense in depth
 
-### Defense in Depth
-
-1. **Perimeter**: WAFv2 geo-blocks non-KSA/UAE traffic, mitigates SQLi/XSS, and rate-limits IPs.
-2. **Network**: 3-tier VPC isolation (Public / Private / Database). Private subnets have no direct internet egress except via NAT Gateway. Database subnets are completely isolated.
-3. **Compute**: EKS private endpoint only. Bastion host is required for administrative kubectl access. Nodes use IAM roles with least-privilege policies.
-4. **Identity**: IRSA assigns fine-grained IAM roles to individual Kubernetes service accounts. No node-level AWS credentials are mounted into pods.
-5. **Data**: All data at rest is encrypted with KMS CMK. RDS uses envelope encryption. S3 buckets enforce TLS-only transport.
-6. **Audit**: CloudTrail logs every API call. GuardDuty detects anomalous behavior. Security Hub aggregates findings against CIS benchmarks.
+1. **Perimeter**: WAFv2 geo-blocks non-KSA/UAE traffic, mitigates SQLi/XSS, rate-limits IPs.
+2. **Network**: 3-tier VPC isolation. Private subnets have no direct internet egress except via NAT Gateway; database subnets are fully isolated.
+3. **Compute**: EKS private endpoint only; bastion host required for admin `kubectl` access; nodes use least-privilege IAM roles.
+4. **Identity**: IRSA assigns fine-grained IAM roles per Kubernetes service account — no node-level AWS credentials mounted into pods.
+5. **Data**: KMS CMK encryption at rest, envelope encryption for RDS, TLS-only S3 transport.
+6. **Audit**: CloudTrail logs every API call; GuardDuty detects anomalies; Security Hub aggregates findings against CIS benchmarks.
 
 ### IRSA (IAM Roles for Service Accounts)
 
-Instead of granting broad EC2 instance profile permissions to all pods, each workload receives its own IAM role:
+Each workload gets its own scoped IAM role instead of a broad EC2 instance profile:
 
-- **ALB Controller**: Can manage ELBs, target groups, and security groups.
-- **External-DNS**: Can modify Route53 hosted zones.
-- **Cert-Manager**: Can create Route53 DNS records for ACME challenges.
-- **Cluster Autoscaler**: Can scale Auto Scaling Groups tagged for the cluster.
+- **ALB Controller** — manage ELBs, target groups, security groups
+- **External-DNS** — modify Route53 hosted zones
+- **Cert-Manager** — create Route53 records for ACME challenges
+- **Cluster Autoscaler** — scale tagged Auto Scaling Groups
 
-No role has `*:*` permissions. All policies are scoped to the minimum required actions.
+No role holds `*:*` permissions.
 
-### Encryption Strategy
+### Encryption strategy
 
-- **At Rest**: KMS CMK (multi-region in prod) encrypts EKS secrets, RDS storage, EBS volumes, and S3 objects.
-- **In Transit**: TLS 1.2+ enforced on ALBs, S3 bucket policies, and API endpoints.
-- **Key Rotation**: KMS automatic key rotation is enabled.
+- **At rest**: KMS CMK (multi-region in prod) encrypts EKS secrets, RDS storage, EBS volumes, S3 objects.
+- **In transit**: TLS 1.2+ enforced on ALBs, S3 bucket policies, API endpoints.
+- **Rotation**: automatic annual KMS key rotation.
 
 ---
 
 ## Observability Guide
 
-### Accessing Dashboards
+| Tool | Access Method | Command |
+| --- | --- | --- |
+| Grafana | Port-forward | `kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80` |
+| ArgoCD | Port-forward | `make argocd-login` |
+| CloudWatch | AWS Console | Navigate to CloudWatch > Dashboards |
+| PagerDuty | Web | Log in to your PagerDuty tenant |
 
-After deployment, retrieve access credentials and endpoints:
-
-| Tool           | Access Method | Command                                                                        |
-| -------------- | ------------- | ------------------------------------------------------------------------------ |
-| **Grafana**    | Port-forward  | `kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80` |
-| **ArgoCD**     | Port-forward  | `make argocd-login`                                                            |
-| **CloudWatch** | AWS Console   | Navigate to CloudWatch > Dashboards                                            |
-| **PagerDuty**  | Web           | Log in to your PagerDuty tenant                                                |
-
-### Sample Alert Queries
-
-**High CPU in EKS Nodes** (PromQL):
-
+**High CPU on EKS nodes (PromQL):**
 ```promql
 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
 ```
 
-**5xx Errors on ALB** (CloudWatch Metrics):
-
+**5xx errors on ALB (CloudWatch Metrics):**
 ```
 Namespace: AWS/ApplicationELB
 MetricName: HTTPCode_Target_5XX_Count
@@ -889,8 +381,7 @@ Period: 60
 Threshold: > 10
 ```
 
-**Failed Login Attempts** (CloudWatch Logs Insights):
-
+**Failed login attempts (CloudWatch Logs Insights):**
 ```sql
 fields @timestamp, @message
 | filter @message like /Failed login/
@@ -898,97 +389,205 @@ fields @timestamp, @message
 | filter failed_attempts > 5
 ```
 
-### Datadog APM
-
-The Datadog agent runs as a DaemonSet. It pulls the API key from AWS Secrets Manager (referenced by `var.observability.datadog_api_key_secret_arn`). Deploy the agent via the Helm chart in `kubernetes/` after creating the secret.
+Datadog's agent runs as a DaemonSet and pulls its API key from Secrets Manager (`var.observability.datadog_api_key_secret_arn`). Deploy it via the Helm chart in `kubernetes/` after creating the secret.
 
 ---
 
 ## Disaster Recovery
 
-### RTO / RPO Targets
+| Metric | Target | Implementation |
+| --- | --- | --- |
+| **RTO** | < 4 hours | Multi-region EKS, Route53 failover, automated ArgoCD sync to DR |
+| **RPO** | < 1 hour | RDS cross-region read replica, S3 Cross-Region Replication (CRR) |
 
-| Metric                             | Target    | Implementation                                                   |
-| ---------------------------------- | --------- | ---------------------------------------------------------------- |
-| **RTO** (Recovery Time Objective)  | < 4 hours | Multi-region EKS, Route53 failover, automated ArgoCD sync to DR  |
-| **RPO** (Recovery Point Objective) | < 1 hour  | RDS cross-region read replica, S3 Cross-Region Replication (CRR) |
+### Failover sequence
 
-### Failover Procedure
+| Event | Automatic or Manual | Time |
+| --- | --- | --- |
+| Route53 detects Riyadh ALB unhealthy | Automatic | ~30 seconds |
+| DNS switches to Dubai ALB | Automatic | ~60 seconds |
+| Dubai EKS cluster serves traffic | Automatic (already running) | Immediate |
+| DBA promotes Dubai RDS replica to writer | Manual | ~15 minutes |
+| Full DR verified via smoke tests | Manual | ~30 minutes |
 
-1. **Detection**: Route53 health checks detect primary region failure.
-2. **DNS Failover**: Route53 automatically updates DNS to point to the Dubai ALB.
-3. **Database Promotion**: Promote the Dubai RDS read replica to standalone writer.
-4. **Cluster Sync**: ArgoCD ensures the DR EKS cluster is running the same application version.
-5. **Verification**: Run smoke tests against the Dubai endpoints.
+### Backup verification
 
-### Backup Verification
-
-- **Monthly**: Restore RDS snapshot to a temporary instance and validate connectivity.
-- **Quarterly**: Perform a full DR drill, including DNS cutover and database promotion.
+- **Monthly**: restore an RDS snapshot to a temporary instance and validate connectivity.
+- **Quarterly**: full DR drill — DNS cutover and database promotion.
 
 ---
 
 ## Cost Optimization
 
-### Right-Sizing
+- **Right-sizing**: dev uses Spot instances (`capacity_type`); staging mirrors production topology at smaller instance classes; production uses On-Demand with Karpenter for dynamic scaling.
+- **Savings Plans**: for predictable production baselines, 1- or 3-year Compute Savings Plans cut EC2 cost up to 72%.
+- **Tagging**: every resource carries `Project`, `Environment`, `ManagedBy`, `Owner`, `CostCenter` for Cost Explorer chargeback.
+- **Lifecycle policies**: S3 audit logs move to Glacier after 90 days, Deep Archive after 180 days; ECR deletes untagged images older than 30 days.
 
-- **Dev**: Uses Spot instances for EKS node groups (configurable via `capacity_type`).
-- **Staging**: Mirrors production topology but with smaller instance classes.
-- **Production**: Uses On-Demand for stability, with Karpenter for dynamic scaling.
+---
 
-### Savings Plans
+## Full Walkthrough — How This Works Step by Step
 
-For production workloads with predictable baselines, purchase Compute Savings Plans for 1- or 3-year terms to reduce EC2 costs by up to 72%.
+> A plain-language walk from `git clone` to a live, DR-capable banking backend.
 
-### Resource Tagging
+### Step 1 — Configure
 
-All resources are tagged with `Project`, `Environment`, `ManagedBy`, `Owner`, and `CostCenter`. Use AWS Cost Explorer and tagging policies to allocate costs by team and environment.
+Open `terraform/environments/dev/terraform.tfvars` and fill in project name, primary region, node count, alert email, etc. This is the only file you touch.
 
-### Lifecycle Policies
+### Step 2 — Pre-flight check
 
-- S3 audit logs transition to Glacier after 90 days and Deep Archive after 180 days.
-- ECR lifecycle policies automatically delete untagged images older than 30 days.
+```bash
+make preflight ENV=dev
+```
+Confirms AWS login, Terraform install, service quota headroom, and account permissions to create VPCs/EKS/RDS.
+
+### Step 3 — Bootstrap state storage
+
+```bash
+make bootstrap ENV=dev
+```
+Creates the S3 bucket (state) and DynamoDB table (lock), named from your config — no manual naming.
+
+### Step 4 — Phase 1: infrastructure
+
+```bash
+make infra ENV=dev
+```
+Builds, in order: networking (VPC, 3-tier subnets, NAT), security (WAF, GuardDuty, KMS, CloudTrail), compliance (7-year locked audit bucket, Config rules), database (encrypted PostgreSQL, 30-day credential rotation), and the private EKS cluster. Takes ~20–40 minutes.
+
+### Step 5 — Phase 2: cluster addons
+
+```bash
+make k8s ENV=dev
+```
+Installs ArgoCD, Prometheus, and Grafana into the running cluster via Helm.
+
+### Step 6 — Sync applications
+
+```bash
+make argocd-sync-dev
+```
+ArgoCD reads Kubernetes manifests from Git and deploys them. Every future push updates the cluster automatically — no manual deploys.
+
+### Step 7 — Traffic path in production
+
+Customer → Route53 → WAF (SA/AE geo-check) → Load Balancer → EKS pods → RDS PostgreSQL, with every action logged to a 7-year tamper-proof CloudTrail bucket.
+
+### Step 8 — Continuous monitoring
+
+Prometheus scrapes every 15 seconds, Grafana visualizes it, CloudWatch watches the AWS layer, PagerDuty pages on-call on alarm, GuardDuty watches for intrusion and exfiltration behavior.
+
+### Step 9 — Automatic regional failover
+
+Route53 health-checks Riyadh every 30 seconds; on failure, DNS switches to Dubai, whose EKS cluster is already running and in sync via ArgoCD, and whose RDS replica is promoted to writer.
+
+**Result**: one config file, four commands, and you have two Kubernetes clusters, an encrypted database, a geo-restricted firewall, 7 years of immutable audit logs, automated threat detection, real-time dashboards, GitOps delivery, and automatic cross-region failover.
+
+---
+
+## Implementation Deep Dive — Behind the Scenes
+
+> Every layer, and why it exists — for engineers reviewing the actual implementation.
+
+### Layer 1 — Config → Terraform variables
+
+```
+terraform/environments/dev/terraform.tfvars
+        ↓
+terraform/variables.tf   (types, validation)
+        ↓
+terraform/main.tf        (passes values to each module)
+        ↓
+terraform/modules/{networking,security,compliance,database,eks,observability,gitops}/
+        ↓
+Running AWS infrastructure
+```
+
+Nothing is hardcoded — `main.tf` reads `var.networking.cidr_blocks`, always from your config.
+
+### Layer 2 — Networking
+
+```
+AWS Region (me-central-1, Riyadh)
+└── VPC (10.0.0.0/16)
+    ├── Public Subnets (10.0.0.0/20)    ← Load Balancers
+    ├── Private Subnets (10.0.16.0/20)  ← App pods
+    └── Database Subnets (10.0.32.0/20) ← Isolated DB tier
+```
+
+3 Availability Zones for AZ-level fault tolerance; NAT Gateway for one-way egress; VPC Flow Logs on every packet (SAMA requirement).
+
+### Layer 3 — Security
+
+- **KMS**: master encryption key for DB records, S3 objects, and K8s secrets; rotates annually.
+- **WAF**: geo-restricted to SA/AE, blocks SQLi/XSS, rate-limits at 3,000 req/5min/IP (configurable).
+- **GuardDuty**: ML-driven analysis of CloudTrail/VPC Flow/DNS logs for anomalous API calls, known-bad IPs, crypto-mining behavior, exfiltration.
+- **Security Hub**: aggregates GuardDuty/Config/Inspector findings, scores against the CIS Foundations Benchmark.
+
+### Layer 4 — Compliance
+
+- **CloudTrail**: every API call recorded, stored in S3 with Object Lock COMPLIANCE mode — undeletable for 7 years even by the root account. Satisfies SAMA 3.2.1/3.2.2.
+- **AWS Config**: detects manual drift outside Terraform, records full resource configuration history.
+- **S3 lifecycle**: Standard (0–90 days) → Glacier (90–180 days) → Deep Archive (180 days–7 years) → deleted.
+
+### Layer 5 — Database
+
+- **RDS PostgreSQL**: Multi-AZ in prod with ~60-second automatic failover, KMS encryption at rest, daily backups (7-day dev / 35-day prod retention), Performance Insights for query diagnostics.
+- **Secrets Manager**: DB password never touches code or config; rotates every 30 days; pods retrieve it at runtime only.
+
+### Layer 6 — EKS
+
+- **Control plane**: private-only API server, accessed via bastion host — a stolen kubeconfig is useless without VPN/bastion access.
+- **Node groups**: Spot `t3.medium` in dev, On-Demand in prod, autoscaling on load.
+- **IRSA**: least-privilege IAM per workload rather than broad node-level permissions — minimizes blast radius if a pod is compromised.
+
+### Layer 7 — Observability
+
+Prometheus scrapes `/metrics` every 15s; Grafana visualizes node health, pod restarts, p50/p95/p99 latency, error rates, DB connections; CloudWatch Container Insights auto-captures pod logs; PagerDuty pages on-call on alarm.
+
+### Layer 8 — GitOps
+
+- **ArgoCD**: watches `gitops_repo_url`, reconciles desired (Git) vs. actual (cluster) state within ~3 minutes; `enable_self_heal = true` reverts manual `kubectl apply` drift automatically.
+- **GitHub Actions**: build image → SonarQube SAST → Trivy image scan → `terraform plan` → merge → ArgoCD deploy.
+
+### Layer 9 — Cross-region resilience
+
+See [Disaster Recovery](#disaster-recovery) above for the full RTO/RPO targets and failover sequence — this layer is what makes that failover possible: async RDS replication, S3 CRR, and a warm-standby Dubai EKS cluster kept in sync by ArgoCD.
 
 ---
 
 ## Troubleshooting
 
-### Quota Limits
+### Quota limits
 
 **Error**: `VpcLimitExceeded`
-**Fix**: Request a quota increase via AWS Service Quotas console or run:
-
+**Fix**:
 ```bash
 aws service-quotas request-quota-increase --service-code ec2 --quota-code L-1194D1C8 --desired-value 10
 ```
 
-### IRSA Misconfiguration
+### IRSA misconfiguration
 
 **Error**: `WebIdentityErr: failed to retrieve credentials`
-**Fix**: Verify the service account annotation matches the IAM role ARN:
-
+**Fix**: verify the service account annotation matches the IAM role ARN:
 ```bash
 kubectl get sa -n kube-system aws-load-balancer-controller -o yaml
 ```
+Ensure the OIDC provider thumbprint is current.
 
-Ensure the OIDC provider thumbprint is up to date.
-
-### ArgoCD Sync Failures
+### ArgoCD sync failures
 
 **Error**: `ComparisonError: failed to get resource`
-**Fix**: Check cluster RBAC and ArgoCD application destination namespace:
-
+**Fix**: check cluster RBAC and the Application's destination namespace:
 ```bash
 kubectl logs -n argocd deployment/argocd-application-controller
 ```
+Confirm `project` and `destination.server` are correct.
 
-Ensure the Application's `project` and `destination.server` are correct.
-
-### Terraform State Lock
+### Terraform state lock
 
 **Error**: `Error acquiring the state lock`
-**Fix**: If a previous run crashed, force-unlock after confirming no active runs:
-
+**Fix**, after confirming no active runs:
 ```bash
 cd terraform && terraform force-unlock <LOCK_ID>
 ```
@@ -997,19 +596,16 @@ cd terraform && terraform force-unlock <LOCK_ID>
 
 ## Roadmap
 
-This project is designed to evolve. Planned enhancements include:
-
-1. **AWS Fargate**: Migrate non-critical workloads to Fargate profiles for serverless container execution.
-2. **Chaos Engineering**: Integrate AWS Fault Injection Simulator (FIS) to test AZ failures, API throttling, and network blackholes.
-3. **Service Mesh**: Deploy Istio or AWS App Mesh for mTLS between microservices and advanced traffic management.
-4. **FinOps Dashboard**: Build a Grafana dashboard using CUR (Cost and Usage Report) data exported to Athena.
-5. **Policy as Code**: Expand OPA (Open Policy Agent) gatekeeper policies for Kubernetes admission control.
-6. **Multi-Cloud DR**: Evaluate Azure or GCP as a tertiary DR target for extreme resilience.
+1. **AWS Fargate** — migrate non-critical workloads to serverless container execution.
+2. **Chaos Engineering** — integrate AWS Fault Injection Simulator (FIS) for AZ failure, API throttling, network blackhole testing.
+3. **Service Mesh** — Istio or AWS App Mesh for mTLS between microservices and advanced traffic management.
+4. **FinOps Dashboard** — Grafana dashboard built on CUR data exported to Athena.
+5. **Policy as Code** — expand OPA Gatekeeper policies for Kubernetes admission control.
+6. **Multi-Cloud DR** — evaluate Azure or GCP as a tertiary DR target.
 
 ---
 
 ## License
-
 This project is provided as an educational and portfolio reference. Adapt it for your organization with appropriate security reviews and penetration testing before production use in regulated environments.
 
 ---
